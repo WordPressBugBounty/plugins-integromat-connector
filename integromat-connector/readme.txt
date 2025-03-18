@@ -4,7 +4,7 @@ Tags: rest, api, rest api, integromat, endpoint, endpoints, meta, data, meta_dat
 Requires at least: 5.0
 Tested up to:  6.7.2
 Requires PHP: 7.2
-Stable tag: 1.5.9
+Stable tag: 1.5.10
 License: GPLv2 or later
 
 
@@ -44,6 +44,9 @@ This plugin allows you to safely connect your WordPress site to Make. It also gi
 This plugin does not send any data to the make.com service itself. It only simplifies the connection process and allows custom fields to be included in the REST API responses.
 
 == Changelog ==
+= 1.5.10 =
+* Fix a bug introduced in previous fix regarding PHP 7 compatibility
+
 = 1.5.9 =
 * Improve compatibility with other plugins
 
