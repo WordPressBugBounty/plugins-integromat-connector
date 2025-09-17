@@ -2,6 +2,8 @@
 
 namespace Integromat;
 
+defined( 'ABSPATH' ) || die( 'No direct access allowed' );
+
 class Meta_Object {
 
 	/**
@@ -12,12 +14,25 @@ class Meta_Object {
 	 */
 	public function get_meta_items( $table ) {
 		global $wpdb;
-		$query = "
-			SELECT DISTINCT(meta_key) 
-			FROM $table
-			ORDER BY meta_key
-		";
-		return $wpdb->get_col( $query );
+		
+		// Validate table name against known WordPress meta tables for security
+		$allowed_tables = array(
+			$wpdb->postmeta,
+			$wpdb->usermeta,
+			$wpdb->commentmeta,
+			$wpdb->termmeta
+		);
+		
+		if ( ! in_array( $table, $allowed_tables, true ) ) {
+			return array();
+		}
+		
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- No WordPress function exists to get distinct meta keys from meta tables, one-time admin query, table name validated against whitelist
+		$query = "SELECT DISTINCT(meta_key) FROM `" . esc_sql( $table ) . "` ORDER BY meta_key";
+		$result = $wpdb->get_col( $query );
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared
+		
+		return is_array( $result ) ? $result : array();
 	}
 
 }

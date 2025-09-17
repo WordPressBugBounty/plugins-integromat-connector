@@ -2,15 +2,19 @@
 
 namespace Integromat;
 
+defined( 'ABSPATH' ) || die( 'No direct access allowed' );
+
 function add_taxonomies() {
-	register_setting( 'integromat_api_taxonomy', 'integromat_api_options_taxonomy' );
+	register_setting( 'integromat_api_taxonomy', 'integromat_api_options_taxonomy', array(
+		'sanitize_callback' => __NAMESPACE__ . '\sanitize_taxonomy_options',
+	) );
 
 	add_settings_section(
 		'integromat_api_section_taxonomy',
 		'',
 		function () {
 			?>
-				<p><?php esc_html_e( 'Select taxonomies to enable or disable in REST API response.', 'integromat_api_post' ); ?></p>
+				<p><?php esc_html_e( 'Select taxonomies to enable or disable in REST API response.', 'integromat-connector' ); ?></p>
 				<p><a class="uncheck_all" data-status="0">Un/check all</a></p>
 			<?php
 		},
@@ -40,4 +44,23 @@ function add_taxonomies() {
 			)
 		);
 	}
+}
+
+/**
+ * Sanitize taxonomy options
+ *
+ * @param array $input
+ * @return array
+ */
+function sanitize_taxonomy_options( $input ) {
+	if ( ! is_array( $input ) ) {
+		return array();
+	}
+
+	$sanitized = array();
+	foreach ( $input as $key => $value ) {
+		$sanitized[ sanitize_key( $key ) ] = sanitize_text_field( $value );
+	}
+
+	return $sanitized;
 }

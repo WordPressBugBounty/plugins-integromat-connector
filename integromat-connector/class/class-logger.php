@@ -2,12 +2,59 @@
 
 namespace Integromat;
 
+defined( 'ABSPATH' ) || die( 'No direct access allowed' );
+
 class Logger {
 	const MAXFILESIZEMB = 5;
-	const CIPHERMETHOD  = 'AES-256-ECB';
+	const CIPHERMETHOD  = 'AES-256-CBC'; // More secure than ECB mode
+	const ENCRYPTION_KEY_LENGTH = 32;
+	const BYTES_IN_MB = 1000000;
+	const API_KEY_PREVIEW_LENGTH = 5;
 
+	/**
+	 * Get secure log file location outside web root
+	 *
+	 * @return string
+	 */
 	private static function get_file_location() {
-		return WP_CONTENT_DIR . '/uploads/iwclog.dat';
+		// Store logs outside web-accessible directory for security
+		$upload_dir = wp_upload_dir();
+		$log_dir    = $upload_dir['basedir'] . '/iwc-logs';
+		
+		// Create directory if it doesn't exist
+		if ( ! file_exists( $log_dir ) ) {
+			wp_mkdir_p( $log_dir );
+			// Add .htaccess to deny web access
+			file_put_contents( $log_dir . '/.htaccess', "Deny from all\n" );
+			// Add index.php to prevent directory listing
+			file_put_contents( $log_dir . '/index.php', "<?php\n// Silence is golden.\n" );
+		}
+		
+		return $log_dir . '/iwclog.dat';
+	}
+
+	/**
+	 * Get encryption key for log data
+	 *
+	 * @return string
+	 */
+	private static function get_encryption_key() {
+		$key = get_site_option( 'iwc_log_encryption_key' );
+		if ( empty( $key ) ) {
+			// Generate a new encryption key
+			$key = wp_generate_password( self::ENCRYPTION_KEY_LENGTH, true, true );
+			update_site_option( 'iwc_log_encryption_key', $key );
+		}
+		return $key;
+	}
+
+	/**
+	 * Generate IV for encryption
+	 *
+	 * @return string
+	 */
+	private static function generate_iv() {
+		return openssl_random_pseudo_bytes( openssl_cipher_iv_length( self::CIPHERMETHOD ) );
 	}
 
 	private static function check() {
@@ -15,93 +62,108 @@ class Logger {
 			self::create_file();
 		} else {
 			$fsize = filesize( self::get_file_location() );
-			if ( $fsize > ( self::MAXFILESIZEMB * 1000000 ) ) {
+			if ( $fsize > ( self::MAXFILESIZEMB * self::BYTES_IN_MB ) ) {
 				self::create_file();
 			}
 		}
 	}
 
 	private static function create_file() {
-		$init                            = 'Log file initiated @ ' . date( 'Y-m-d G:i:s' ) . "\n=SERVER INFO START=";
-		$server_data                     = $_SERVER;
-		$server_data['REQUEST_URI']      = self::strip_request_query( sanitize_url( $_SERVER['REQUEST_URI'] ) );
-		$server_data['HTTP_IWC_API_KEY'] = ( isset( $server_data['HTTP_IWC_API_KEY'] ) ? substr( sanitize_text_field( $_SERVER['HTTP_IWC_API_KEY'] ), 0, 5 ) . '...' : 'Not Provided' );
-
-		$server_data['SERVER_SOFTWARE']    = sanitize_text_field( $_SERVER['SERVER_SOFTWARE'] );
-		$server_data['REQUEST_URI']        = sanitize_url( $_SERVER['REQUEST_URI'] );
-		$server_data['REDIRECT_UNIQUE_ID'] = sanitize_text_field( $_SERVER['REDIRECT_UNIQUE_ID'] );
-
-		$server_data['REDIRECT_STATUS']                  = sanitize_text_field( $_SERVER['REDIRECT_STATUS'] );
-		$server_data['UNIQUE_ID']                        = sanitize_text_field( $_SERVER['UNIQUE_ID'] );
-		$server_data['HTTP_X_DATADOG_SAMPLING_PRIORITY'] = sanitize_text_field( $_SERVER['HTTP_X_DATADOG_SAMPLING_PRIORITY'] );
-		$server_data['HTTP_X_DATADOG_SAMPLED']           = sanitize_text_field( $_SERVER['HTTP_X_DATADOG_SAMPLED'] );
-		$server_data['HTTP_X_DATADOG_PARENT_ID']         = sanitize_text_field( $_SERVER['HTTP_X_DATADOG_PARENT_ID'] );
-
-		$server_data['HTTP_X_DATADOG_TRACE_ID'] = sanitize_text_field( $_SERVER['HTTP_X_DATADOG_TRACE_ID'] );
-		$server_data['CONTENT_TYPE']            = sanitize_text_field( $_SERVER['CONTENT_TYPE'] );
-		$server_data['HTTP_USER_AGENT']         = sanitize_text_field( $_SERVER['HTTP_USER_AGENT'] );
-		$server_data['HTTP_X_FORWARDED_PORT']   = sanitize_text_field( $_SERVER['HTTP_X_FORWARDED_PORT'] );
-
-		$server_data['HTTP_X_FORWARDED_SSL']   = sanitize_text_field( $_SERVER['HTTP_X_FORWARDED_SSL'] );
-		$server_data['HTTP_X_FORWARDED_PROTO'] = sanitize_text_field( $_SERVER['HTTP_X_FORWARDED_PROTO'] );
-		$server_data['HTTP_X_FORWARDED_FOR']   = sanitize_text_field( $_SERVER['HTTP_X_FORWARDED_FOR'] );
-		$server_data['HTTP_X_REAL_IP']         = sanitize_text_field( $_SERVER['HTTP_X_REAL_IP'] );
-		$server_data['HTTP_CONNECTION']        = sanitize_text_field( $_SERVER['HTTP_CONNECTION'] );
-		$server_data['HTTP_HOST']              = sanitize_text_field( $_SERVER['HTTP_HOST'] );
-		$server_data['HTTP_X_FORWARDED_HOST']  = sanitize_text_field( $_SERVER['HTTP_X_FORWARDED_HOST'] );
-		$server_data['PATH']                   = sanitize_text_field( $_SERVER['PATH'] );
-		$server_data['DYLD_LIBRARY_PATH']      = sanitize_text_field( $_SERVER['DYLD_LIBRARY_PATH'] );
-		$server_data['SERVER_SIGNATURE']       = sanitize_text_field( $_SERVER['SERVER_SIGNATURE'] );
-		$server_data['SERVER_NAME']            = sanitize_text_field( $_SERVER['SERVER_NAME'] );
-		$server_data['SERVER_ADDR']            = sanitize_text_field( $_SERVER['SERVER_ADDR'] );
-		$server_data['SERVER_PORT']            = sanitize_text_field( $_SERVER['SERVER_PORT'] );
-		$server_data['REMOTE_ADDR']            = sanitize_text_field( $_SERVER['REMOTE_ADDR'] );
-		$server_data['DOCUMENT_ROOT']          = sanitize_text_field( $_SERVER['DOCUMENT_ROOT'] );
-		$server_data['REQUEST_SCHEME']         = sanitize_text_field( $_SERVER['REQUEST_SCHEME'] );
-		$server_data['CONTEXT_PREFIX']         = sanitize_text_field( $_SERVER['CONTEXT_PREFIX'] );
-		$server_data['CONTEXT_DOCUMENT_ROOT']  = sanitize_text_field( $_SERVER['CONTEXT_DOCUMENT_ROOT'] );
-		$server_data['SERVER_ADMIN']           = sanitize_email( $_SERVER['SERVER_ADMIN'] );
-		$server_data['SCRIPT_FILENAME']        = sanitize_text_field( $_SERVER['SCRIPT_FILENAME'] );
-		$server_data['REMOTE_PORT']            = sanitize_text_field( $_SERVER['REMOTE_PORT'] );
-		$server_data['REDIRECT_URL']           = sanitize_text_field( $_SERVER['REDIRECT_URL'] );
-		$server_data['GATEWAY_INTERFACE']      = sanitize_text_field( $_SERVER['GATEWAY_INTERFACE'] );
-		$server_data['SERVER_PROTOCOL']        = sanitize_text_field( $_SERVER['SERVER_PROTOCOL'] );
-		$server_data['REQUEST_METHOD']         = sanitize_text_field( $_SERVER['REQUEST_METHOD'] );
-		$server_data['SCRIPT_NAME']            = sanitize_text_field( $_SERVER['SCRIPT_NAME'] );
-		$server_data['PHP_SELF']               = sanitize_text_field( $_SERVER['PHP_SELF'] );
-		$server_data['REQUEST_TIME_FLOAT']     = sanitize_text_field( $_SERVER['REQUEST_TIME_FLOAT'] );
-		$server_data['REQUEST_TIME']           = sanitize_text_field( $_SERVER['REQUEST_TIME'] );
-
-		/*
-		unset( $server_data['QUERY_STRING'] );
-		unset( $server_data['REDIRECT_QUERY_STRING'] );
-		unset( $server_data['HTTP_AUTHORIZATION'] );
-		unset( $server_data['REDIRECT_HTTP_AUTHORIZATION'] );
-		unset( $server_data['HTTP_COOKIE'] );
-		if ( isset( $server_data['PHP_AUTH_USER'] ) ) {
-			$server_data['PHP_AUTH_USER'] = '*******';
-		}
-		if ( isset( $server_data['PHP_AUTH_PW'] ) ) {
-			$server_data['PHP_AUTH_PW'] = '*******';
-		}
-		*/
-		$init .= str_replace( 'Array', '', print_r( $server_data, true ) ) . "=SERVER INFO END=\n\n";
-		file_put_contents( self::get_file_location(), self::encrypt( $init ) );
+		// Create an empty log file without server info or CSV header
+		file_put_contents( self::get_file_location(), self::encrypt( '' ) );
 		if ( ! self::file_exists() ) {
-			die( '{"code": "log_write_fail", "message": "Log file can not be created. Check permissions."}' );
+			wp_die( wp_json_encode( array( 'code' => 'log_write_fail', 'message' => 'Log file can not be created. Check permissions.' ) ) );
 		}
+	}
+
+	/**
+	 * Generate server info and CSV header for download
+	 *
+	 * @return string
+	 */
+	private static function get_server_info_and_header() {
+		$init                            = "====== SERVER INFO START ======\n\n";
+		$server_data                     = array();
+		
+		// Safely extract server data with existence checks and unslashing
+		$server_data['REQUEST_URI']      = isset( $_SERVER['REQUEST_URI'] ) ? self::strip_request_query( sanitize_url( wp_unslash( $_SERVER['REQUEST_URI'] ) ) ) : 'Not Available';
+		$server_data['HTTP_IWC_API_KEY'] = isset( $_SERVER['HTTP_IWC_API_KEY'] ) ? substr( sanitize_text_field( wp_unslash( $_SERVER['HTTP_IWC_API_KEY'] ) ), 0, self::API_KEY_PREVIEW_LENGTH ) . '...' : 'Not Provided';
+
+		// List of server variables to extract using the helper method
+		$server_vars = array(
+			'SERVER_SOFTWARE', 'REDIRECT_UNIQUE_ID', 'REDIRECT_STATUS', 'UNIQUE_ID',
+			'HTTP_X_DATADOG_SAMPLING_PRIORITY', 'HTTP_X_DATADOG_SAMPLED', 'HTTP_X_DATADOG_PARENT_ID',
+			'HTTP_X_DATADOG_TRACE_ID', 'CONTENT_TYPE', 'HTTP_USER_AGENT', 'HTTP_X_FORWARDED_PORT',
+			'HTTP_X_FORWARDED_SSL', 'HTTP_X_FORWARDED_PROTO', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP',
+			'HTTP_CONNECTION', 'HTTP_HOST', 'HTTP_X_FORWARDED_HOST', 'PATH', 'DYLD_LIBRARY_PATH',
+			'SERVER_SIGNATURE', 'SERVER_NAME', 'SERVER_ADDR', 'SERVER_PORT', 'REMOTE_ADDR',
+			'DOCUMENT_ROOT', 'REQUEST_SCHEME', 'CONTEXT_PREFIX', 'CONTEXT_DOCUMENT_ROOT',
+			'SCRIPT_FILENAME', 'REMOTE_PORT', 'REDIRECT_URL', 'GATEWAY_INTERFACE',
+			'SERVER_PROTOCOL', 'REQUEST_METHOD', 'SCRIPT_NAME', 'PHP_SELF', 'REQUEST_TIME_FLOAT', 'REQUEST_TIME'
+		);
+		
+		// Handle all server variables using helper method
+		foreach ( $server_vars as $var ) {
+			$server_data[ $var ] = self::get_sanitized_server_var( $var );
+		}
+		
+		// Special handling for SERVER_ADMIN using email sanitization
+		$server_data['SERVER_ADMIN'] = isset( $_SERVER['SERVER_ADMIN'] ) ? sanitize_email( wp_unslash( $_SERVER['SERVER_ADMIN'] ) ) : 'Not Available';
+
+		foreach ( $server_data as $key => $value ) {
+			$init .= $key . ': ' . $value . "\n";
+		}
+		$init .= "\n====== SERVER INFO END ======\n\n";
+		$init .= "date,method,uri,ip,codes,logged_in\n";
+		
+		return $init;
 	}
 
 	public static function file_exists() {
 		return file_exists( self::get_file_location() );
 	}
 
+	/**
+	 * Encrypt data using secure AES-256-CBC
+	 *
+	 * @param string $data
+	 * @return string
+	 */
 	private static function encrypt( $data ) {
-		return openssl_encrypt( $data, self::CIPHERMETHOD, self::get_enc_key() );
+		$key = self::get_encryption_key();
+		$iv  = self::generate_iv();
+		
+		$encrypted = openssl_encrypt( $data, self::CIPHERMETHOD, $key, 0, $iv );
+		
+		// Prepend IV to encrypted data
+		return base64_encode( $iv . $encrypted );
 	}
 
+	/**
+	 * Decrypt data using secure AES-256-CBC
+	 *
+	 * @param string $data
+	 * @return string
+	 */
 	private static function decrypt( $data ) {
-		return openssl_decrypt( $data, self::CIPHERMETHOD, self::get_enc_key() );
+		$key  = self::get_encryption_key();
+		$data = base64_decode( $data );
+		
+		$iv_length = openssl_cipher_iv_length( self::CIPHERMETHOD );
+		$iv        = substr( $data, 0, $iv_length );
+		$encrypted = substr( $data, $iv_length );
+		
+		return openssl_decrypt( $encrypted, self::CIPHERMETHOD, $key, 0, $iv );
+	}
+
+	/**
+	 * Helper method to safely get and sanitize server variables
+	 * 
+	 * @param string $var_name The server variable name
+	 * @return string Sanitized value or 'Not Available'
+	 */
+	private static function get_sanitized_server_var( $var_name ) {
+		return isset( $_SERVER[ $var_name ] ) ? sanitize_text_field( wp_unslash( $_SERVER[ $var_name ] ) ) : 'Not Available';
 	}
 
 	private static function strip_request_query( $request ) {
@@ -110,14 +172,26 @@ class Logger {
 	}
 
 	private static function get_record( $codes ) {
+		$request_method = self::get_sanitized_server_var( 'REQUEST_METHOD' );
+		if ( $request_method === 'Not Available' ) {
+			$request_method = 'Unknown';
+		}
+		
+		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? self::strip_request_query( sanitize_url( wp_unslash( $_SERVER['REQUEST_URI'] ) ) ) : 'Unknown';
+		$remote_addr = self::get_sanitized_server_var( 'REMOTE_ADDR' );
+		if ( $remote_addr === 'Not Available' ) {
+			$remote_addr = 'Unknown';
+		}
+		
 		$r = array(
-			'request' => sanitize_text_field( $_SERVER['REQUEST_METHOD'] ) . ' ' . self::strip_request_query( sanitize_url( $_SERVER['REQUEST_URI'] ) ),
-			'ip'      => sanitize_url( $_SERVER['REMOTE_ADDR'] ),
-			'codes'   => $codes . '(' . (string) is_user_logged_in() . ')',
+			'date' => gmdate( 'Y-m-d\TH:i:s.v\Z' ),
+			'method' => $request_method,
+			'uri' => $request_uri,
+			'ip'      => $remote_addr,
+			'codes'   => $codes,
+			'logged_in' => (string) is_user_logged_in(),
 		);
-		$r = str_replace( array( '[', 'Array', ']' ), '', print_r( $r, true ) );
-		$r = str_replace( ' =>', ':', $r );
-		return date( 'Y-m-d G:i:s' ) . ' ' . $r . "\n";
+		return trim( implode(',', $r) ) . "\n";
 	}
 
 	public static function write( $codes ) {
@@ -129,26 +203,48 @@ class Logger {
 
 	public static function get_plain_file_content() {
 		if ( ! file_exists( self::get_file_location() ) ) {
-			die( '{"code": "log_read_fail", "message": "Log file does not exist."}' );
+			wp_die( wp_json_encode( array( 'code' => 'log_read_fail', 'message' => 'Log file does not exist.' ) ) );
 		}
 		$enc_data = file_get_contents( self::get_file_location() );
 		return self::decrypt( $enc_data );
 	}
 
-	private static function get_enc_key() {
-		$key = get_option( 'iwc_api_key' );
-		if ( empty( $key ) ) {
-			file_put_contents( self::get_file_location(), 'iwc_api_key Not Found' );
-		}
-		return $key;
-	}
-
 	public static function download() {
 		$log_data = self::get_plain_file_content();
+		
+		// Prepend server info and CSV header to the log data for download
+		$download_data = self::get_server_info_and_header() . $log_data;
+		
 		header( 'Content-Type: application/octet-stream' );
 		header( 'Content-Transfer-Encoding: Binary' );
 		header( 'Content-disposition: attachment; filename="log.txt"' );
-		echo $log_data;
+
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- We want to output raw log data
+		echo $download_data;
 		exit;
+	}
+
+	/**
+	 * Purge all log data
+	 *
+	 * @return bool Success status
+	 */
+	public static function purge() {
+		$log_file = self::get_file_location();
+		
+		if ( file_exists( $log_file ) ) {
+			// Remove the log file using WordPress function
+			$result = wp_delete_file( $log_file );
+			
+			if ( $result ) {
+				// Also remove the encryption key to ensure complete cleanup
+				delete_site_option( 'iwc_log_encryption_key' );
+				return true;
+			}
+			return false;
+		}
+		
+		// If file doesn't exist, consider it a success
+		return true;
 	}
 }

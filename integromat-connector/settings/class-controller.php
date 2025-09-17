@@ -2,6 +2,8 @@
 
 namespace Integromat;
 
+defined( 'ABSPATH' ) || die( 'No direct access allowed' );
+
 class Controller {
 	public function init() {
 		/**
@@ -11,7 +13,8 @@ class Controller {
 			'admin_init',
 			function () {
 				global $pagenow;
-				if ( 'options.php' === $pagenow || $pagenow === 'admin.php' && isset( $_GET['page'] ) && $_GET['page'] === IWC_MENUITEM_IDENTIFIER ) {
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Admin page check, no form processing
+				if ( 'options.php' === $pagenow || ( 'admin.php' === $pagenow && isset( $_GET['page'] ) && sanitize_text_field( wp_unslash( $_GET['page'] ) ) === IWC_MENUITEM_IDENTIFIER ) ) {
 					// Posts.
 					require_once __DIR__ . '/object-types/class-post-meta.php';
 					$posts_meta = new Posts_Meta();
@@ -33,13 +36,18 @@ class Controller {
 					$terms_meta->init();
 				}
 
-				if ( $pagenow == 'options.php' || $pagenow == 'admin.php' && isset( $_GET['page'] ) && $_GET['page'] == 'integromat_custom_toxonomies' ) {
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Admin page check, no form processing
+				if ( 'options.php' === $pagenow || ( 'admin.php' === $pagenow && isset( $_GET['page'] ) && sanitize_text_field( wp_unslash( $_GET['page'] ) ) === 'integromat_custom_toxonomies' ) ) {
 					// Taxonomies.
 					require_once __DIR__ . '/object-types/custom-taxonomy.php';
 					add_taxonomies();
 				}
 				require_once __DIR__ . '/object-types/general.php';
 				add_general_menu();
+				
+				// Security settings
+				require_once __DIR__ . '/object-types/security.php';
+				add_security_menu();
 			}
 		);
 

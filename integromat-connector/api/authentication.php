@@ -25,19 +25,55 @@ add_filter(
 		}
 
 		if ( $skip ) {
-			$log && \Integromat\Logger::write( implode( ', ', $codes ) );
+			$log && \Integromat\Logger::write( implode( ';', $codes ) );
 			return $result;
 		}
 
 		if ( isset( $_SERVER['HTTP_IWC_API_KEY'] ) && ! empty( $_SERVER['HTTP_IWC_API_KEY'] ) ) {
 
-			$token = sanitize_text_field( $_SERVER['HTTP_IWC_API_KEY'] );
+			$token = sanitize_text_field( wp_unslash( $_SERVER['HTTP_IWC_API_KEY'] ) );
 
 			if ( strlen( $token ) !== \Integromat\Api_Token::API_TOKEN_LENGTH || ! \Integromat\Api_Token::is_valid( $token ) ) {
 				$log && \Integromat\Logger::write( 6 );
 				\Integromat\Rest_Response::render_error( 401, 'Provided API key is invalid', 'invalid_token' );
 			} else {
-				\Integromat\User::login( $user_id );
+				// Check rate limiting
+				$rate_limit_id = \Integromat\Rate_Limiter::get_identifier();
+				if ( \Integromat\Rate_Limiter::is_rate_limited( $rate_limit_id ) ) {
+					$rate_status = \Integromat\Rate_Limiter::get_rate_limit_status( $rate_limit_id );
+					$log && \Integromat\Logger::write( 9 );
+					\Integromat\Rest_Response::render_error( 
+						429, 
+						'Rate limit exceeded. Try again later.', 
+						'rate_limit_exceeded',
+						array(
+							'X-RateLimit-Limit' => $rate_status['limit'],
+							'X-RateLimit-Remaining' => max( 0, $rate_status['limit'] - $rate_status['requests'] ),
+							'X-RateLimit-Reset' => $rate_status['reset_time'],
+						)
+					);
+				}
+
+				// Check payload size
+				if ( \Integromat\Rate_Limiter::is_payload_too_large() ) {
+					$log && \Integromat\Logger::write( 10 );
+					\Integromat\Rest_Response::render_error( 413, 'Request payload too large', 'payload_too_large' );
+				}
+
+				// Extract endpoint and method for permission checking
+				$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_url( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+				$method = isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : 'GET';
+				
+				$endpoint = '';
+				if ( preg_match( '#\/wp-json/(.*?)(\?.*)?$#i', $request_uri, $matches ) ) {
+					$endpoint = '/' . $matches[1];
+				}
+
+				// Use safer user context setting with permission checking
+				if ( ! \Integromat\User::set_api_user_context( $user_id, $endpoint, $method ) ) {
+					$log && \Integromat\Logger::write( 8 );
+					\Integromat\Rest_Response::render_error( 403, 'Insufficient API permissions', 'insufficient_permissions' );
+				}
 				$log && \Integromat\Logger::write( 7 );
 				\Integromat\Rest_Request::dispatch();
 			}

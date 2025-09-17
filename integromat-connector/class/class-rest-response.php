@@ -2,6 +2,8 @@
 
 namespace Integromat;
 
+defined( 'ABSPATH' ) || die( 'No direct access allowed' );
+
 class Rest_Response {
 	/**
 	 * Includes users Custom fields into the REST API response payload
@@ -61,18 +63,27 @@ class Rest_Response {
 	 * @param int    $status_code
 	 * @param string $error_message
 	 * @param string $error_code
+	 * @param array  $headers Optional headers to include
 	 */
-	public static function render_error( $status_code, $error_message, $error_code ) {
-		$out = '{
-			"code": "' . $error_code . '",
-			"message": "' . $error_message . '",
-			"data": {
-				"status": ' . $status_code . '
-			}
-		}';
+	public static function render_error( $status_code, $error_message, $error_code, $headers = array(), $details = array() ) {
 		http_response_code( $status_code );
 		header( 'Content-type: application/json' );
-		// use wp_send_json_error instead?
-		die( trim( $out ) );
+
+		$error = array(
+			"code" => $error_code,
+			"message" => $error_message,
+			"data" => array_merge( array ( "status" => $status_code ), $details ),
+		);
+		
+		foreach ( $headers as $name => $value ) {
+			$clean_name = preg_replace( '/[^\w-]/', '', $name );
+			$clean_value = preg_replace( '/[\r\n]/', '', $value );
+			if ( ! empty( $clean_name ) && ! empty( $clean_value ) ) {
+				header( "$clean_name: $clean_value" );
+			}
+		}
+		
+		echo wp_json_encode( $error );
+		exit;
 	}
 }

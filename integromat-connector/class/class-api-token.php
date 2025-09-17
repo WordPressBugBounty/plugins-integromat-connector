@@ -2,6 +2,8 @@
 
 namespace Integromat;
 
+defined( 'ABSPATH' ) || die( 'No direct access allowed' );
+
 class Api_Token {
 
 	const API_TOKEN_IDENTIFIER = 'iwc_api_key';
@@ -25,7 +27,9 @@ class Api_Token {
 	 */
 	public static function initiate() {
 		if ( self::get() == '' ) {
-			update_site_option( self::API_TOKEN_IDENTIFIER, self::generate( self::API_TOKEN_LENGTH ) );
+			// Use WordPress secure password generation for better entropy
+			$secure_token = wp_generate_password( self::API_TOKEN_LENGTH, true, true );
+			update_site_option( self::API_TOKEN_IDENTIFIER, $secure_token );
 		}
 	}
 
@@ -35,35 +39,21 @@ class Api_Token {
 	 * @return bool
 	 */
 	public static function is_valid( $token ) {
-		return ( $token == get_site_option( self::API_TOKEN_IDENTIFIER ) );
+		// Use hash_equals to prevent timing attacks
+		$stored_token = get_site_option( self::API_TOKEN_IDENTIFIER );
+		return hash_equals( $stored_token, $token );
 	}
 
-
 	/**
-	 * Generate random string
+	 * Regenerate API token
 	 *
-	 * @param int    $length
-	 * @param string $charlist
-	 * @return string
+	 * @return string New token
 	 * @throws \Exception
 	 */
-	public static function generate( $length = 10, $charlist = '0-9a-z' ) {
-		$charlist = count_chars(
-			preg_replace_callback(
-				'#.-.#',
-				function ( $m ) {
-					return implode( '', range( $m[0][0], $m[0][2] ) );
-				},
-				$charlist
-			),
-			3
-		);
-		$ch_len   = strlen( $charlist );
-		$res      = '';
-		for ( $i = 0; $i < $length; $i++ ) {
-			$res .= $charlist[ random_int( 0, $ch_len - 1 ) ];
-		}
-		return $res;
+	public static function regenerate() {
+		$new_token = wp_generate_password( self::API_TOKEN_LENGTH, true, true );
+		update_site_option( self::API_TOKEN_IDENTIFIER, $new_token );
+		return $new_token;
 	}
 
 }

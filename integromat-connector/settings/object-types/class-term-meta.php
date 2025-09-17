@@ -2,19 +2,23 @@
 
 namespace Integromat;
 
+defined( 'ABSPATH' ) || die( 'No direct access allowed' );
+
 class Terms_Meta extends Meta_Object {
 	private $meta_item_keys = array();
 	public function init() {
 		global $wpdb;
 		$this->meta_item_keys = $this->get_meta_items( $wpdb->termmeta );
-		register_setting( 'integromat_api_term', 'integromat_api_options_term' );
+		register_setting( 'integromat_api_term', 'integromat_api_options_term', array(
+			'sanitize_callback' => array( $this, 'sanitize_term_options' ),
+		) );
 
 		add_settings_section(
 			'integromat_api_section_terms',
-			__( '', 'integromat_api_term' ),
+			__( 'Terms Metadata Settings', 'integromat-connector' ),
 			function () {
 				?>
-				<p><?php esc_html_e( 'Select terms metadata to include in REST API response', 'integromat_api_term' ); ?></p>
+				<p><?php esc_html_e( 'Select terms metadata to include in REST API response', 'integromat-connector' ); ?></p>
 				<p><a class="uncheck_all" data-status="0">Un/check all</a></p>
 				<?php
 			},
@@ -24,7 +28,7 @@ class Terms_Meta extends Meta_Object {
 		foreach ( $this->meta_item_keys as $meta_item ) {
 			add_settings_field(
 				IWC_FIELD_PREFIX . $meta_item,
-				__( $meta_item, 'integromat_api_term' ),
+				esc_html( $meta_item ),
 				function ( $args ) use ( $meta_item ) {
 					$options = get_option( 'integromat_api_options_term' );
 					?>
@@ -43,5 +47,24 @@ class Terms_Meta extends Meta_Object {
 				)
 			);
 		}
+	}
+
+	/**
+	 * Sanitize term options
+	 *
+	 * @param array $input
+	 * @return array
+	 */
+	public function sanitize_term_options( $input ) {
+		if ( ! is_array( $input ) ) {
+			return array();
+		}
+
+		$sanitized = array();
+		foreach ( $input as $key => $value ) {
+			$sanitized[ sanitize_key( $key ) ] = sanitize_text_field( $value );
+		}
+
+		return $sanitized;
 	}
 }

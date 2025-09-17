@@ -2,6 +2,8 @@
 
 namespace Integromat;
 
+defined( 'ABSPATH' ) || die( 'No direct access allowed' );
+
 class Posts_Meta extends Meta_Object {
 	private $meta_item_keys = array();
 
@@ -11,14 +13,16 @@ class Posts_Meta extends Meta_Object {
 
 	public function init() {
 		$this->meta_item_keys = $this->get_post_meta_items();
-		register_setting( 'integromat_api_post', 'integromat_api_options_post' );
+		register_setting( 'integromat_api_post', 'integromat_api_options_post', array(
+			'sanitize_callback' => array( $this, 'sanitize_post_options' ),
+		) );
 
 		add_settings_section(
 			'integromat_api_section_posts',
-			__( '', 'integromat_api_post' ), // h1 title as the first argument.
+			__( 'Posts Metadata Settings', 'integromat-connector' ), // h1 title as the first argument.
 			function () {
 				?>
-					<p><?php esc_html_e( 'Select posts metadata to include in REST API response', 'integromat_api_post' ); ?></p>
+					<p><?php esc_html_e( 'Select posts metadata to include in REST API response', 'integromat-connector' ); ?></p>
 					<p><a class="uncheck_all" data-status="0">Un/check all</a></p>
 				<?php
 			},
@@ -70,7 +74,7 @@ class Posts_Meta extends Meta_Object {
 
 			add_settings_field(
 				IWC_FIELD_PREFIX . $meta_item,
-				__( $meta_item, 'integromat_api_post' ),
+				esc_html( $meta_item ),
 				function ( $args ) use ( $meta_item, $object_type, $last_object_type ) {
 					$options = get_option( 'integromat_api_options_post' );
 					// Option's values are set as "1", i. e. string type, pay attention when using comparisons.
@@ -115,7 +119,7 @@ class Posts_Meta extends Meta_Object {
 			foreach ( $this->universal_metas as $meta_item ) {
 				add_settings_field(
 					IWC_FIELD_PREFIX . $meta_item,
-					__( $meta_item, 'integromat_api_post' ),
+					esc_html( $meta_item ),
 					function ( $args ) use ( $meta_item ) {
 						$options    = get_option( 'integromat_api_options_post' );
 						$is_checked = ( isset( $options[ $args['label_for'] ] ) && $options[ $args['label_for'] ] == 1 ) ? 'checked' : '';
@@ -145,14 +149,34 @@ class Posts_Meta extends Meta_Object {
 	 */
 	public function get_post_meta_items() {
 		global $wpdb;
-		$query     = '
-			SELECT
-				DISTINCT(m.meta_key),
-				p.post_type
-			FROM ' . $wpdb->base_prefix . 'postmeta m
-			INNER JOIN ' . $wpdb->base_prefix . 'posts p ON p.ID = m.post_id
-		';
+		
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- No WordPress function exists for JOIN queries to get distinct meta keys with post types, one-time admin query, table names validated
+		$query = "SELECT DISTINCT(m.meta_key), p.post_type 
+			FROM `" . esc_sql( $wpdb->postmeta ) . "` m 
+			INNER JOIN `" . esc_sql( $wpdb->posts ) . "` p ON p.ID = m.post_id";
 		$meta_keys = $wpdb->get_results( $query );
-		return $meta_keys;
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared
+
+		return is_array( $meta_keys ) ? $meta_keys : array();
 	}
+
+	/**
+	 * Sanitize post options
+	 *
+	 * @param array $input
+	 * @return array
+	 */
+	public function sanitize_post_options( $input ) {
+		if ( ! is_array( $input ) ) {
+			return array();
+		}
+
+		$sanitized = array();
+		foreach ( $input as $key => $value ) {
+			$sanitized[ sanitize_key( $key ) ] = sanitize_text_field( $value );
+		}
+
+		return $sanitized;
+	}
+
 }

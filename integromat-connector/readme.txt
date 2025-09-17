@@ -1,10 +1,10 @@
 ===  Make Connector ===
 Contributors: integromat
-Tags: rest, api, rest api, integromat, endpoint, endpoints, meta, data, meta_data, Make
+Tags: make, integromat, rest, api, rest api
 Requires at least: 5.0
-Tested up to:  6.7.2
+Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.5.10
+Stable tag: 1.6.0
 License: GPLv2 or later
 
 
@@ -44,6 +44,15 @@ This plugin allows you to safely connect your WordPress site to Make. It also gi
 This plugin does not send any data to the make.com service itself. It only simplifies the connection process and allows custom fields to be included in the REST API responses.
 
 == Changelog ==
+= 1.6.0 =
+* Security improvement: Granular API permissions
+* Security improvement: Configurable rate limiting
+* New feature: Enhanced file upload validation
+* New feature: Request payload size limits
+* New feature: API key rotation
+* New feature: Purge log
+* Fix multiple vulnerabilities
+
 = 1.5.10 =
 * Fix a bug introduced in previous fix regarding PHP 7 compatibility
 
