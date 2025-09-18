@@ -125,7 +125,7 @@ class Rest_Request {
 			}
 			return $sanitized;
 		} elseif ( is_string( $data ) ) {
-			return sanitize_text_field( $data );
+			return wp_kses_post( wp_unslash( $data ) );
 		} elseif ( is_numeric( $data ) ) {
 			return is_float( $data ) ? floatval( $data ) : intval( $data );
 		} elseif ( is_bool( $data ) ) {
