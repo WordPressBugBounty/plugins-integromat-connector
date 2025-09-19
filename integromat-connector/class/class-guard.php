@@ -9,7 +9,7 @@ class Guard {
 	 *
 	 * @return bool
 	 */
-	public static function is_protected() {
+	public static function is_protected() {	
 		// Only guard if IWC-API-KEY header is present
 		if ( ! isset( $_SERVER['HTTP_IWC_API_KEY'] ) || empty( $_SERVER['HTTP_IWC_API_KEY'] ) ) {
 			return false; // No protection if no IWC-API-KEY header

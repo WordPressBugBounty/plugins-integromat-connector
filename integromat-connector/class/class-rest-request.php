@@ -125,7 +125,21 @@ class Rest_Request {
 			}
 			return $sanitized;
 		} elseif ( is_string( $data ) ) {
-			return wp_kses_post( wp_unslash( $data ) );
+			// Get allowed post tags and add iframe support for embedded content
+			$allowed_tags = wp_kses_allowed_html( 'post' );
+			$allowed_tags['iframe'] = array(
+				'src'             => true,
+				'width'           => true,
+				'height'          => true,
+				'frameborder'     => true,
+				'allowfullscreen' => true,
+				'loading'         => true,
+				'title'           => true,
+				'sandbox'         => true,
+				'allow'           => true,
+				'style'           => true,
+			);
+			return wp_kses( wp_unslash( $data ), $allowed_tags );
 		} elseif ( is_numeric( $data ) ) {
 			return is_float( $data ) ? floatval( $data ) : intval( $data );
 		} elseif ( is_bool( $data ) ) {
