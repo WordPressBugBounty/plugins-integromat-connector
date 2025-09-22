@@ -7,7 +7,7 @@ defined( 'ABSPATH' ) || die( 'No direct access allowed' );
 function add_security_menu() {
 	// Register security settings
 	register_setting( 'integromat_security_options', 'iwc_rate_limit_enabled', array(
-		'sanitize_callback' => 'sanitize_text_field',
+		'sanitize_callback' => 'Integromat\\iwc_sanitize_checkbox_value',
 		'default' => '0',
 	) );
 	
@@ -17,7 +17,7 @@ function add_security_menu() {
 	) );
 	
 	register_setting( 'integromat_security_options', 'iwc_payload_limit_enabled', array(
-		'sanitize_callback' => 'sanitize_text_field',
+		'sanitize_callback' => 'Integromat\\iwc_sanitize_checkbox_value',
 		'default' => '0',
 	) );
 	
@@ -27,7 +27,7 @@ function add_security_menu() {
 	) );
 	
 	register_setting( 'integromat_security_options', 'iwc_strict_file_validation', array(
-		'sanitize_callback' => 'sanitize_text_field',
+		'sanitize_callback' => 'Integromat\\iwc_sanitize_checkbox_value',
 		'default' => '0',
 	) );
 	
@@ -37,7 +37,12 @@ function add_security_menu() {
 	) );
 	
 	register_setting( 'integromat_security_options', 'iwc_log_security_events', array(
-		'sanitize_callback' => 'sanitize_text_field',
+		'sanitize_callback' => 'Integromat\\iwc_sanitize_checkbox_value',
+		'default' => '0',
+	) );
+	
+	register_setting( 'integromat_security_options', 'iwc_sanitize_post_content', array(
+		'sanitize_callback' => 'Integromat\\iwc_sanitize_checkbox_value',
 		'default' => '0',
 	) );
 
@@ -62,6 +67,35 @@ function add_security_menu() {
 					Log security events (recommended)
 				</label>
 				<p class="description">Log rate limiting violations and permission denials for security monitoring.</p>
+			</div>
+			<?php
+		},
+		'integromat_security_options',
+		'integromat_security_section',
+		array()
+	);
+
+	add_settings_field(
+		'sanitize_post_content_control',
+		'Content Sanitization',
+		function ( $args ) {
+			$sanitize_post_content = get_option( 'iwc_sanitize_post_content', '0' );
+			?>
+			<div class="iwc-sanitize-content-container">
+				<label>
+					<input type="checkbox" name="iwc_sanitize_post_content" value="1" <?php checked( $sanitize_post_content, '1' ); ?> />
+					Sanitize post content (recommended)
+				</label>
+				<p class="description">Strip potentially harmful HTML tags and attributes from incoming content.</p>
+				
+				<div class="notice notice-warning" style="margin: 10px 0; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-left: 4px solid #ffb900;">
+					<p style="margin: 0 0 8px 0; font-size: 13px;">
+						<strong>⚠️ Warning:</strong> Disabling this may allow dangerous HTML/scripts to be stored. Only disable if you trust your API clients completely.
+					</p>
+					<p style="margin: 0; font-size: 12px; color: #666;">
+						<strong>Examples of tags that will be stripped when enabled:</strong> &lt;script&gt;, &lt;iframe&gt;, &lt;object&gt;, &lt;embed&gt;, &lt;form&gt;, &lt;input&gt;, &lt;style&gt;, &lt;link&gt;, &lt;meta&gt;
+					</p>
+				</div>
 			</div>
 			<?php
 		},
@@ -323,4 +357,9 @@ function iwc_conditional_save_allowed_extensions( $value ) {
 	
 	// Return current saved value to preserve it
 	return get_option( 'iwc_allowed_file_extensions', 'jpg,jpeg,png,gif,webp,svg,bmp,ico,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,rtf,odt,ods,zip,rar,7z,tar,gz,mp3,wav,mp4,avi,mov,wmv,flv,webm,json,xml,csv' );
+}
+
+function iwc_sanitize_checkbox_value( $value ) {
+	// Ensure only '0' or '1' values are accepted for checkbox settings
+	return ( $value === '1' || $value === 1 || $value === true ) ? '1' : '0';
 }

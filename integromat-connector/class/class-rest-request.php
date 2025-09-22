@@ -125,21 +125,14 @@ class Rest_Request {
 			}
 			return $sanitized;
 		} elseif ( is_string( $data ) ) {
-			// Get allowed post tags and add iframe support for embedded content
-			$allowed_tags = wp_kses_allowed_html( 'post' );
-			$allowed_tags['iframe'] = array(
-				'src'             => true,
-				'width'           => true,
-				'height'          => true,
-				'frameborder'     => true,
-				'allowfullscreen' => true,
-				'loading'         => true,
-				'title'           => true,
-				'sandbox'         => true,
-				'allow'           => true,
-				'style'           => true,
-			);
-			return wp_kses( wp_unslash( $data ), $allowed_tags );
+			// Check if content sanitization is enabled
+			$sanitize_content = get_option( 'iwc_sanitize_post_content', '0' );
+			if ( $sanitize_content === '1' ) {
+				return wp_kses_post( wp_unslash( $data ) );
+			} else {
+				// Only apply basic unslashing without HTML stripping when disabled
+				return wp_unslash( $data );
+			}
 		} elseif ( is_numeric( $data ) ) {
 			return is_float( $data ) ? floatval( $data ) : intval( $data );
 		} elseif ( is_bool( $data ) ) {
@@ -263,17 +256,14 @@ class Rest_Request {
 
 		if ( $movefile && ! isset( $movefile['error'] ) ) {
 			// Get additional metadata
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- REST API endpoint, authentication handled separately
+			// phpcs:disable WordPress.Security.NonceVerification.Recommended -- REST API endpoint, authentication handled separately
 			$title       = isset( $_REQUEST['title'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['title'] ) ) : '';
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- REST API endpoint, authentication handled separately
 			$description = isset( $_REQUEST['description'] ) ? sanitize_textarea_field( wp_unslash( $_REQUEST['description'] ) ) : '';
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- REST API endpoint, authentication handled separately
 			$caption     = isset( $_REQUEST['caption'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['caption'] ) ) : '';
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- REST API endpoint, authentication handled separately
 			$alt_text    = isset( $_REQUEST['alt_text'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['alt_text'] ) ) : '';
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- REST API endpoint, authentication handled separately
 			$post_id     = isset( $_REQUEST['post'] ) ? absint( $_REQUEST['post'] ) : 0;
 			$filename   = basename( $movefile['file'] );
+			// phpcs:enable WordPress.Security.NonceVerification.Recommended
 			// Prepare attachment data
 			$attachment = array(
 				'post_mime_type' => $movefile['type'],
