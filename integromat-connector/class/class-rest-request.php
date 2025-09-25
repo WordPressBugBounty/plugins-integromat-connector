@@ -58,7 +58,7 @@ class Rest_Request {
 		if ( ! empty( $_GET ) ) {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- REST API endpoint, authentication handled separately
 			foreach ( $_GET as $key => $value ) {
-				$clean_key = sanitize_key( $key );
+				$clean_key = sanitize_text_field( $key );
 				if ( is_array( $value ) ) {
 					$query_params[ $clean_key ] = array_map( 'sanitize_text_field', wp_unslash( $value ) );
 				} else {
@@ -120,7 +120,7 @@ class Rest_Request {
 		if ( is_array( $data ) ) {
 			$sanitized = array();
 			foreach ( $data as $key => $value ) {
-				$clean_key = sanitize_key( $key );
+				$clean_key = sanitize_text_field( $key );
 				$sanitized[ $clean_key ] = self::sanitize_recursive( $value );
 			}
 			return $sanitized;
